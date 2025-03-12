@@ -236,7 +236,7 @@ function Dashboard() {
           <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">Latest News</h2>
           <p className="mt-2 text-gray-600">Stay informed with the latest updates</p>
           
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
+          <div className="mt-6 flex flex-col items-center space-y-4">
             <div className="flex items-center space-x-2">
               <Filter className="w-5 h-5 text-gray-500" />
               <DropdownMenu.Root>
@@ -244,7 +244,7 @@ function Dashboard() {
                   <span>{selectedPreferences.length ? `${selectedPreferences.length} selected` : 'Select preferences'}</span>
                 </DropdownMenu.Trigger>
 
-                <DropdownMenu.Content className="bg-white rounded-lg shadow-lg border p-2 min-w-[200px]">
+                <DropdownMenu.Content className="bg-white rounded-lg shadow-lg border p-2 min-w-[200px] z-50">
                   {PREFERENCES.map((pref) => (
                     <DropdownMenu.Item
                       key={pref}
@@ -265,16 +265,33 @@ function Dashboard() {
                   ))}
                 </DropdownMenu.Content>
               </DropdownMenu.Root>
+            </div>
 
-              {selectedPreferences.length > 0 && (
+            {selectedPreferences.length > 0 && (
+              <div className="flex flex-wrap gap-2 justify-center">
+                {selectedPreferences.map((pref) => (
+                  <div
+                    key={pref}
+                    className="inline-flex items-center px-3 py-1 rounded-full bg-blue-100 text-blue-700"
+                  >
+                    <span className="text-sm font-medium">{pref}</span>
+                    <button
+                      onClick={() => setSelectedPreferences(prev => prev.filter(p => p !== pref))}
+                      className="ml-2 text-blue-600 hover:text-blue-800"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
                 <button
                   onClick={() => setSelectedPreferences([])}
-                  className="p-2 text-gray-500 hover:text-red-500 transition-colors"
+                  className="inline-flex items-center px-3 py-1 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200"
                 >
-                  <XCircle className="w-5 h-5" />
+                  <span className="text-sm font-medium">Clear all</span>
+                  <XCircle className="w-4 h-4 ml-2" />
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -399,9 +416,13 @@ function Dashboard() {
                     </span>
                   </div>
                   <div className="prose max-w-none">
+                    <h4 className="text-lg font-semibold text-gray-800 mb-2">Summary</h4>
                     <p className="text-gray-700 mb-6">{selectedNews.news_summary}</p>
                     {selectedNews.news_content && (
-                      <p className="text-gray-700 mb-6">{selectedNews.news_content}</p>
+                      <>
+                        <h4 className="text-lg font-semibold text-gray-800 mb-2">Content</h4>
+                        <p className="text-gray-700 mb-6">{selectedNews.news_content}</p>
+                      </>
                     )}
                   </div>
                   <div className="flex items-center justify-between mt-6 pt-6 border-t">
