@@ -8,37 +8,36 @@ const STORAGE_KEYS = {
   
   export const loadUserPreferences = (userId) => {
     try {
-      const data = localStorage.getItem(`user_preferences_${userId}`);
-      if (data) {
-        const preferences = JSON.parse(data);
-        return {
-          readNews: new Set(preferences.readNews || []),
-          savedNews: new Set(preferences.savedNews || []),
-          preferences: preferences.preferences || [],
-          displayMode: preferences.displayMode || 'all'
-        };
-      }
+      const readNews = new Set(JSON.parse(localStorage.getItem(`${userId}_${STORAGE_KEYS.READ_NEWS}`) || '[]'));
+      const savedNews = new Set(JSON.parse(localStorage.getItem(`${userId}_${STORAGE_KEYS.SAVED_NEWS}`) || '[]'));
+      const preferences = JSON.parse(localStorage.getItem(`${userId}_${STORAGE_KEYS.PREFERENCES}`) || '[]');
+      const sentimentOrder = localStorage.getItem(`${userId}_${STORAGE_KEYS.SENTIMENT_ORDER}`) || 'all';
+  
+      return {
+        readNews,
+        savedNews,
+        preferences,
+        sentimentOrder
+      };
     } catch (error) {
-      console.error('Error loading preferences:', error);
+      console.error('Error loading user preferences:', error);
+      return {
+        readNews: new Set(),
+        savedNews: new Set(),
+        preferences: [],
+        sentimentOrder: 'all'
+      };
     }
-    return {
-      readNews: new Set(),
-      savedNews: new Set(),
-      preferences: [],
-      displayMode: 'all'
-    };
   };
   
-  export const saveUserPreferences = (userId, data) => {
+  export const saveUserPreferences = (userId, { readNews, savedNews, preferences, sentimentOrder }) => {
     try {
-      const preferences = {
-        readNews: Array.from(data.readNews),
-        savedNews: Array.from(data.savedNews),
-        preferences: data.preferences,
-        displayMode: data.displayMode
-      };
-      localStorage.setItem(`user_preferences_${userId}`, JSON.stringify(preferences));
+      localStorage.setItem(`${userId}_${STORAGE_KEYS.READ_NEWS}`, JSON.stringify(Array.from(readNews)));
+      localStorage.setItem(`${userId}_${STORAGE_KEYS.SAVED_NEWS}`, JSON.stringify(Array.from(savedNews)));
+      localStorage.setItem(`${userId}_${STORAGE_KEYS.PREFERENCES}`, JSON.stringify(preferences));
+      localStorage.setItem(`${userId}_${STORAGE_KEYS.SENTIMENT_ORDER}`, sentimentOrder);
     } catch (error) {
-      console.error('Error saving preferences:', error);
+      console.error('Error saving user preferences:', error);
     }
   };
+  
