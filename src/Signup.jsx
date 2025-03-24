@@ -31,6 +31,7 @@ function Signup() {
     setSignupStatus('');
   
     try {
+      await nhost.auth.signOut();
       const { session, error: signUpError } = await nhost.auth.signUp({
         email,
         password,
