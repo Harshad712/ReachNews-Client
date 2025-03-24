@@ -8,6 +8,7 @@ function Signup() {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [passwordError, setPasswordError] = useState('');
+  const [signupStatus, setSignupStatus] = useState('');
   const navigate = useNavigate();
 
   const validatePassword = (value) => {
@@ -27,6 +28,7 @@ function Signup() {
     }
 
     setLoading(true);
+    setSignupStatus('');
   
     try {
       const { session, error: signUpError } = await nhost.auth.signUp({
@@ -40,22 +42,49 @@ function Signup() {
       });
   
       if (signUpError) {
+        if (signUpError.error === 'email-already-exists') {
+          setSignupStatus('error');
+          console.error('Signup error: Email already exists');
+          return;
+        }
         console.error('Signup error:', signUpError.message);
+        setSignupStatus('error');
         return;
       }
   
+      // Email verification is required
+      setSignupStatus('verification-email-sent');
+      
+      // Don't navigate immediately since we want the user to verify their email
       if (session) {
-        console.log('User signed up and logged in:', session);
-        navigate('/dashboard');
-      } else {
-        console.warn('Signup successful but no session found.');
+        console.log('User signed up:', session);
       }
     } catch (error) {
       console.error('Unexpected error:', error);
+      setSignupStatus('error');
     } finally {
       setLoading(false);
     }
   };
+
+  const getStatusMessage = () => {
+    switch (signupStatus) {
+      case 'verification-email-sent':
+        return {
+          type: 'success',
+          message: 'Please check your email to verify your account. A verification link has been sent to your email address.'
+        };
+      case 'error':
+        return {
+          type: 'error',
+          message: 'This email is already registered. Please try logging in or use a different email address.'
+        };
+      default:
+        return null;
+    }
+  };
+
+  const statusMessage = getStatusMessage();
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -69,6 +98,14 @@ function Signup() {
           </p>
         </div>
         
+        {statusMessage && (
+          <div className={`rounded-md p-4 ${
+            statusMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+          }`}>
+            <p className="text-sm">{statusMessage.message}</p>
+          </div>
+        )}
+
         <form className="mt-8 space-y-6" onSubmit={handleSignup}>
           <div className="rounded-md shadow-sm space-y-4">
             <div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { User, X, Bookmark, Check, Filter, LogOut, XCircle, BookOpen, Home } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { fetchNewsData } from "./utils/api";
@@ -7,7 +7,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useNavigate } from 'react-router-dom';
 import nhost from './nhost';
-import { loadUserPreferences, saveUserPreferences } from './utils/storage';
+import { updatePreferences, saveArticle, markArticleAsRead, fetchUserProfile } from './utils/database';
 
 const ITEMS_PER_PAGE = 9;
 const PREFERENCES = [
@@ -19,7 +19,7 @@ const PREFERENCES = [
   "Health",
 ];
 
-function Dashboard() {
+function App() {
   const navigate = useNavigate();
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -33,33 +33,53 @@ function Dashboard() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const user = await nhost.auth.getUser();
-      if (!user) {
+      const currentUser = nhost.auth.getUser();
+      if (!currentUser) {
         navigate('/login');
       } else {
-        setUser(user);
-        // Load saved preferences
-        const preferences = loadUserPreferences(user.id);
-        setReadNews(preferences.readNews);
-        setSavedNews(preferences.savedNews);
-        setSelectedPreferences(preferences.preferences);
-        setDisplayMode(preferences.displayMode);
+        setUser(currentUser);
+        try {
+          const userProfile = await fetchUserProfile(nhost, currentUser.id);
+          if (userProfile) {
+            // Convert the arrays from the database into Sets
+            const readArticles = typeof userProfile.read_articles === "string"? JSON.parse(userProfile.read_articles).flat() : [];
+
+            console.log("✅ Processed read_articles:", readArticles);
+            
+            const savedArticles = typeof userProfile.saved_articles === "string"? JSON.parse(userProfile.saved_articles).flat() : [];
+            
+            console.log("✅ Processed saved_articles:", savedArticles);
+           
+
+            
+            setReadNews(new Set (readArticles));
+            setSavedNews(new Set(savedArticles));
+            setSelectedPreferences(userProfile.preferences?.preferences || []);
+            setDisplayMode(userProfile.display_mode || 'all');
+          }
+        } catch (error) {
+          console.error('Error fetching user profile:', error);
+        }
       }
     };
     checkAuth();
   }, [navigate]);
 
-  // Save preferences whenever they change
   useEffect(() => {
-    if (user) {
-      saveUserPreferences(user.id, {
-        readNews,
-        savedNews,
-        preferences: selectedPreferences,
-        displayMode
-      });
-    }
-  }, [user, readNews, savedNews, selectedPreferences, displayMode]);
+    const updateUserData = async () => {
+      if (user) {
+        try {
+          await updatePreferences(nhost, user.id, {
+            preferences: selectedPreferences,
+            display_mode: displayMode
+          });
+        } catch (error) {
+          console.error('Error updating preferences:', error);
+        }
+      }
+    };
+    updateUserData();
+  }, [user, selectedPreferences, displayMode]);
 
   useEffect(() => {
     const getNews = async () => {
@@ -77,10 +97,6 @@ function Dashboard() {
   }, []);
 
   const handleLogout = async () => {
-    if (user) {
-      // Clear preferences before logout
-      localStorage.removeItem(`user_preferences_${user.id}`);
-    }
     await nhost.auth.signOut();
     navigate('/login');
   };
@@ -114,30 +130,38 @@ function Dashboard() {
     document.body.style.overflow = 'unset';
   };
 
-  const toggleRead = (e, newsId) => {
+  const toggleRead = async (e, newsItem) => {
     e.stopPropagation();
-    setReadNews(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(newsId)) {
-        newSet.delete(newsId);
+    try {
+      const newReadNews = new Set(readNews);
+      if (newReadNews.has(newsItem.id)) {
+        newReadNews.delete(newsItem.id);
       } else {
-        newSet.add(newsId);
+        newReadNews.add(newsItem.id);
       }
-      return newSet;
-    });
+      setReadNews(newReadNews);
+      // Convert Set to Array before saving to database
+      await markArticleAsRead(nhost, user.id, Array.from(newReadNews));
+    } catch (error) {
+      console.error('Error toggling read status:', error);
+    }
   };
 
-  const toggleSave = (e, newsId) => {
+  const toggleSave = async (e, newsItem) => {
     e.stopPropagation();
-    setSavedNews(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(newsId)) {
-        newSet.delete(newsId);
+    try {
+      const newSavedNews = new Set(savedNews);
+      if (newSavedNews.has(newsItem.id)) {
+        newSavedNews.delete(newsItem.id);
       } else {
-        newSet.add(newsId);
+        newSavedNews.add(newsItem.id);
       }
-      return newSet;
-    });
+      setSavedNews(newSavedNews);
+      // Convert Set to Array before saving to database
+      await saveArticle(nhost, user.id, Array.from(newSavedNews));
+    } catch (error) {
+      console.error('Error toggling save status:', error);
+    }
   };
 
   const handleShowMore = () => {
@@ -334,7 +358,7 @@ function Dashboard() {
                         <Tooltip.Root>
                           <Tooltip.Trigger asChild>
                             <button
-                              onClick={(e) => toggleSave(e, item.id)}
+                              onClick={(e) => toggleSave(e, item)}
                               className={`p-2 rounded-full transition-colors duration-200 ${
                                 savedNews.has(item.id) 
                                   ? 'text-blue-500 bg-blue-50 hover:bg-blue-100' 
@@ -357,7 +381,7 @@ function Dashboard() {
                         <Tooltip.Root>
                           <Tooltip.Trigger asChild>
                             <button
-                              onClick={(e) => toggleRead(e, item.id)}
+                              onClick={(e) => toggleRead(e, item)}
                               className={`p-2 rounded-full transition-colors duration-200 ${
                                 readNews.has(item.id)
                                   ? 'text-green-500 bg-green-50 hover:bg-green-100'
@@ -432,7 +456,7 @@ function Dashboard() {
                     </div>
                     <div className="flex items-center space-x-4">
                       <button
-                        onClick={(e) => toggleSave(e, selectedNews.id)}
+                        onClick={(e) => toggleSave(e, selectedNews)}
                         className={`p-2 rounded-full transition-colors duration-200 ${
                           savedNews.has(selectedNews.id) 
                             ? 'text-blue-500 bg-blue-50 hover:bg-blue-100' 
@@ -443,7 +467,7 @@ function Dashboard() {
                       </button>
                       
                       <button
-                        onClick={(e) => toggleRead(e, selectedNews.id)}
+                        onClick={(e) => toggleRead(e, selectedNews)}
                         className={`p-2 rounded-full transition-colors duration-200 ${
                           readNews.has(selectedNews.id)
                             ? 'text-green-500 bg-green-50 hover:bg-green-100'
@@ -475,4 +499,4 @@ function Dashboard() {
   );
 }
 
-export default Dashboard;
+export default App;

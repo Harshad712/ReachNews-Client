@@ -6,32 +6,96 @@ function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
   
     try {
       await nhost.auth.signOut(); // Ensure previous session is cleared
+      const { session, error: loginError } = await nhost.auth.signIn({ email, password });
   
-      const response = await nhost.auth.signIn({
-        email,
-        password,
-        allowedRoles: ["user"],
-        defaultRole: "user",
-      });
-  
-      if (response.error) {
-        setError(response.error.message || "Invalid email or password.");
-      } else {
-        navigate("/dashboard");
+      if (loginError) {
+        setError("Invalid email or password. Please try again.");
+        console.error('Login error:', loginError.message);
+        return;
       }
-    } catch (err) {
+  
+      if (session) {
+        try {
+          // First check if user exists in the database
+          const checkUserResponse = await fetch(`${nhost.graphql.url}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${session.accessToken}`
+            },
+            body: JSON.stringify({
+              query: `
+                query GetUser($email: String!) {
+                  user_profiles(where: { email: { _eq: $email } }) {
+                    id
+                    email
+                  }
+                }
+              `,
+              variables: { email }
+            })
+          });
+  
+          const checkResult = await checkUserResponse.json();
+          
+          if (!checkResult.data?.user_profiles?.length) {
+            // User doesn't exist in the database, insert them
+            const insertResponse = await fetch(`${nhost.graphql.url}`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${session.accessToken}`
+              },
+              body: JSON.stringify({
+                query: `
+                  mutation InsertUser($email: String!) {
+                    insert_user_profiles_one(object: { 
+                      email: $email,
+                      id: "${session.user.id}"
+                    }) {
+                      id
+                      email
+                    }
+                  }
+                `,
+                variables: { email }
+              })
+            });
+  
+            const insertResult = await insertResponse.json();
+            
+            if (insertResult.errors) {
+              console.error("Error inserting user:", insertResult.errors);
+              throw new Error("Failed to create user profile");
+            }
+          }
+          
+          // Successfully logged in and user data is synced
+          navigate("/dashboard");
+        } catch (dbError) {
+          console.error("Database error:", dbError);
+          setError("An error occurred while setting up your account. Please try again.");
+          await nhost.auth.signOut();
+          return;
+        }
+      }
+    } catch (error) {
+      console.error("Unexpected error:", error);
       setError("An unexpected error occurred. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
-  
   
   return (
     <div className="auth-container">
@@ -57,8 +121,12 @@ function Login() {
           className="auth-input"
           required
         />
-        <button type="submit" className="auth-button">
-          Sign In
+        <button 
+          type="submit" 
+          className="auth-button"
+          disabled={loading}
+        >
+          {loading ? "Signing in..." : "Sign In"}
         </button>
       </form>
 
